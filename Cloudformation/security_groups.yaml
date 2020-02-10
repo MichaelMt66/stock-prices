@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: POC - Stack
+Mappings: {}
+Metadata: {}
+Outputs:
+  PublicSG:
+    Description: Private SecurityGroup Id
+    Value: !Ref BelcorpPrivateSG
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSG'
+Conditions: {}
+Parameters:
+  Env:
+    Description: Environment type
+    Type: String
+  Project:
+    Description: Project name
+    Type: String
+  VpcId:
+    Description: VPC ID
+    Type: String
+Resources:
+  BelcorpPrivateSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Sub 'SG_BIGDATA_ARP_WCF_${Env}'
+      GroupDescription: Private SG
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:       
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub 'SG_BIGDATA_ARP_WCF_${Env}'
+        - Key: Grupo
+          Value: !Ref Project
+        - Key: Entorno
+          Value: !Ref Env
+        - Key: Direccion
+          Value: BIGDATA

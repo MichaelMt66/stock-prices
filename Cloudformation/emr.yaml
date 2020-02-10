@@ -1,0 +1,342 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: POC - Emr Stack
+Mappings: {}
+Metadata:  {}
+Outputs:
+  ClusterID:
+    Description: EMR Cluster Id
+    Value: !Ref EmrCluster
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterID'
+  PublicDNS:
+    Description: EMR master public DNS
+    Value: !GetAtt EmrCluster.MasterPublicDNS
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicDNS'
+Parameters:
+  Env:
+    Default: Dev
+    Description: Environment type
+    Type: String
+  Project:
+    Default: Bigdata
+    Description: Project name
+    Type: String
+  KeyName:
+    Default: prueba-key
+    Description: SSH key name
+    Type: 'AWS::EC2::KeyPair::KeyName'
+  EbsRootVolumeSize:
+    Default: '32'
+    Description: Root Volume Size (GB)
+    Type: Number
+  EbsMasterAttachedVolumeSize:
+    Default: '500'
+    Description: Attached Volume Size (Master) (GB)
+    Type: Number 
+  EbsCoreAttachedVolumeSize:
+    Default: '1000'
+    Description: Attached Volume Size (Core) (GB)
+    Type: Number 
+  MasterInstanceType:
+    Description: 'EC2 for EMR instance type (c1.medium, c4.large, etc).'
+    Type: String
+  CoreSpotFleetInstanceType01:
+    Description: 'EC2 for EMR instance type (c1.medium, c4.large, etc).'
+    Type: String
+  NumberOfMasterInstances:
+    Description: Number of Master Instances
+    Type: Number
+  NumberOfCoreInstances:
+    Description: Number of Master Instances
+    Type: Number
+  TerminationProtected:
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+    Description: Must enable termination protection
+    Type: String
+  EmrReleaseLabel:
+    Description: EMR Release version
+    Type: String
+    Default: emr-5.19.0
+  EmrClusterName:
+    Description: EMR Cluster Name
+    Type: String
+  BucketName:
+    Description: The name of the bucket
+    Type: String
+  EmrLogS3Key:
+    Description: 'Key for EMR logs on S3: bucket_name/EmrLogS3Key'
+    Type: String
+  EmrFsMetastoreName:
+    Description: EMRFS Consistent View metastore table name
+    Type: String
+    Default: EmrFSMetadata
+  EmrLockTableName:
+    Description: EMR locking table name
+    Type: String
+    Default: EmrLock
+  PublicSubnet:
+    Description: 'Private subnet where '
+    Type: String
+  EmrMasterSG:
+    Description: Security Group for Master
+    Type: String
+  EmrSlaveSG:
+    Description: Security Group for Cores
+    Type: String
+  BootstrapS3Path:
+    Description: Path to bootstrap scripts
+    Type: String
+Resources:
+  EmrCluster:
+    DependsOn:
+      - EmrServiceRole
+      - EmrInstanceProfileRole
+      - EmrInstanceProfile
+    Type: 'AWS::EMR::Cluster'
+    Properties:
+      Applications:
+        - Name: Spark
+        - Name: Hive
+        - Name: Ganglia
+      Configurations:
+        - Classification: capacity-scheduler
+          ConfigurationProperties:
+            yarn.scheduler.capacity.resource-calculator: org.apache.hadoop.yarn.util.resource.DominantResourceCalculator        
+        - Classification: emrfs-site
+          ConfigurationProperties:
+            fs.s3.maxConnections: 2000
+            fs.s3.consistent: true
+            fs.s3.consistent.metadata.autoCreate: false
+            fs.s3.consistent.metadata.tableName: !Ref EmrMetastoreTable
+        - Classification: core-site
+          ConfigurationProperties:
+            fs.s3n.endpoint: s3.amazonaws.com
+        - Classification: spark-defaults
+          ConfigurationProperties:
+            spark.sql.parquet.fs.optimized.committer.optimization-enabled: true
+        - Classification: spark-hive-site
+          ConfigurationProperties:
+            hive.metastore.client.factory.class: >-
+              com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory
+      Instances:
+        Ec2KeyName: !Ref KeyName
+        Ec2SubnetId: !Ref PublicSubnet
+        AdditionalMasterSecurityGroups:
+          - !Ref EmrMasterSG
+        AdditionalSlaveSecurityGroups:
+          - !Ref EmrSlaveSG
+        MasterInstanceGroup:
+          InstanceCount: !Ref NumberOfMasterInstances
+          InstanceType: !Ref MasterInstanceType
+          Market: ON_DEMAND
+          Name: Master
+          EbsConfiguration:
+            EbsOptimized: true
+            EbsBlockDeviceConfigs:
+              - VolumeSpecification:
+                  SizeInGB: !Ref EbsMasterAttachedVolumeSize
+                  VolumeType: gp2 
+        CoreInstanceGroup:
+          InstanceCount: !Ref NumberOfCoreInstances
+          InstanceType: !Ref CoreSpotFleetInstanceType01
+          Market: ON_DEMAND
+          Name: Core
+          EbsConfiguration:
+            EbsOptimized: true
+            EbsBlockDeviceConfigs:
+              - VolumeSpecification:
+                  SizeInGB: !Ref EbsCoreAttachedVolumeSize
+                  VolumeType: gp2
+        TerminationProtected: !Ref TerminationProtected
+        KeepJobFlowAliveWhenNoSteps: true
+      EbsRootVolumeSize: !Ref EbsRootVolumeSize
+      VisibleToAllUsers: true
+      JobFlowRole: !Ref EmrInstanceProfile
+      ReleaseLabel: !Ref EmrReleaseLabel
+      LogUri: !Join
+        - /
+        - - 's3:/'
+          - !Ref BucketName
+          - !Ref EmrLogS3Key
+      Name: !Ref EmrClusterName
+      AutoScalingRole: EMR_AutoScaling_DefaultRole
+      ServiceRole: !Ref EmrServiceRole
+      Tags:
+        - Key: Name
+          Value: !Sub 'EMRLNX_BIGDATA_DLK_${Env}'
+        - Key: Grupo
+          Value: !Ref Project
+        - Key: Entorno
+          Value: !Ref Env
+        - Key: Tipo
+          Value: Proyecto
+        - Key: Direccion
+          Value: BIGDATA
+        - Key: CTLAdmin
+          Value: "NO"
+        - Key: ServerRol
+          Value: Servicio
+      BootstrapActions:
+        - Name: SetupEmrSlaveUserAccess
+          ScriptBootstrapAction:
+            Path: !Sub "s3://${BootstrapS3Path}/userAccess.sh"
+      Steps:
+        - Name: spark-submit
+          ActionOnFailure: TERMINATE_CLUSTER
+          HadoopJarStep: 
+            - Args: 
+                - spark-submit
+                - --driver-memory
+                - 1G 
+                - --executor-memory
+                - 15G                
+                - --executor-cores
+                - 5
+                - --num-executors
+                - 3
+                - -class
+                - stockPrices              
+              Jar: s3://home-laboratory/analitico/jars/stock-prices-assembly-0.1.jar
+  EmrServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub "bigdata_${Env}_emr_service_role"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - elasticmapreduce.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole'
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+      Policies:
+        - PolicyName: GetPutObjectBucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Join
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - !Ref BucketName
+                  - !Join
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - !Ref BucketName
+                      - /*
+      Path: /
+  EmrInstanceProfileRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub "bigdata_${Env}_emr_instance_role"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: EMROperations
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:Describe*'
+                  - 'sns:*'
+                  - 'sqs:*'
+                  - 'logs:*'
+                  - 'cloudwatch:PutMetricAlarm'
+                  - 'cloudwatch:DescribeAlarms'                  
+                  - 'dynamodb:*'
+                  - 'elasticmapreduce:Describe*'
+                  - 'elasticmapreduce:ListBootstrapActions'
+                  - 'elasticmapreduce:ListClusters'
+                  - 'elasticmapreduce:ListInstanceGroups'
+                  - 'elasticmapreduce:ListInstances'
+                  - 'elasticmapreduce:ListSteps'
+                Resource: '*'
+        - PolicyName: EMRforS3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                  - 's3:ListBucketMultipartUploads'
+                  - 's3:ListBucketVersions'
+                  - 's3:ListMultipartUploadParts'
+                  - 's3:PutObjectAcl'
+                  - 's3:DeleteObject'
+                  - 's3:AbortMultipartUpload'
+                  - 's3:ReplicateDelete'
+                  - 's3:ReplicateObject'
+                Resource:
+                  - !Join
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - !Ref BucketName
+                  - !Join
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - !Ref BucketName
+                      - /*
+  EmrInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: !Sub "bigdata-${Env}-emr-instance-role"
+      Path: /
+      Roles:
+        - !Ref EmrInstanceProfileRole
+  EmrMetastoreTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Join
+        - '_'
+        - - DY_bigdata_arp
+          - !Ref EmrFsMetastoreName
+          - !Ref Env
+      KeySchema:
+        - AttributeName: hashKey
+          KeyType: HASH
+        - AttributeName: rangeKey
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: hashKey
+          AttributeType: S
+        - AttributeName: rangeKey
+          AttributeType: S
+      ProvisionedThroughput:
+        ReadCapacityUnits: 25
+        WriteCapacityUnits: 25
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '_'
+            - - DY_BIGDATA
+              - !Ref EmrFsMetastoreName
+              - !Ref Env
+        - Key: Grupo
+          Value: !Ref Project
+        - Key: Entorno
+          Value: !Ref Env
+        - Key: Direccion
+          Value: BIGDATA

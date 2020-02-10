@@ -1,0 +1,243 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Belcorp - Bigdata Stack
+Mappings:
+  EnvKeys:
+    Lowercase:
+      PRD: prd
+      QAS: qas
+      DEV: dev
+      DEPLOY: deploy
+  S3Buckets:
+    OutputData:
+      PRD: belc-bigdata-functional-dlk-prd
+      QAS: belc-bigdata-functional-dlk-qas
+      DEV: home-laboratory
+      DEPLOY: home-laboratory
+    TemplateSource:
+      PRD: belc-bigdata-apps-shared-prd
+      QAS: belc-bigdata-apps-shared-qas
+      DEV: home-laboratory
+      DEPLOY: home-laboratory
+  S3Keys:
+    EMRLogs:
+      PRD: analitico/Emr/Logs
+      QAS: analitico/Emr/Logs
+      DEV: analitico/Emr/Logs
+      DEPLOY: analitico/Emr/Logs
+    TemplateSource:
+      PRD: templates/
+      QAS: templates/
+      DEV: analitico/templates
+      DEPLOY: templates
+  S3PhaseKeys:
+    Phases:
+      LANDING: landing
+      WORK: work
+      FUNCTIONAL: functional
+  BastionSG:
+    us-east-1:
+      PRD: sg-0cd93949f3e18e7d0
+      QAS: sg-0cd93949f3e18e7d0
+      DEV: sg-0ab877971d851ae1d
+      DEPLOY: tbd
+    us-east-2:
+      PRD: tbd
+      QAS: sg-0cd93949f3e18e7d0
+      DEV: sg-0e3083f04822af3eb
+      DEPLOY: sg-0e3083f04822af3eb
+    us-east-2:
+      PRD: tbd
+      QAS: subnet-a69ac8cc
+      DEV: subnet-0a9141ba151b3748f
+      DEPLOY: subnet-0a9141ba151b3748f
+    us-east-2:
+      PRD: tbd
+      QAS: subnet-237ed20c
+      DEV: subnet-0bedaf5b76e551083
+      DEPLOY: subnet-0bedaf5b76e551083
+  KeyPair:
+    us-east-1:
+      PRD: bigdatakp
+      QAS: bigdatakp
+      DEV: home-laboratory
+      DEPLOY: home-laboratory
+    us-east-2:
+      PRD: tbd
+      QAS: bigdatakp
+      DEV: home-laboratory
+      DEPLOY: home-laboratory
+Metadata: {}
+Outputs: {}
+Conditions:
+  EmrCreate: !Equals
+    - !Ref EmrCreate
+    - 'yes'
+Parameters:
+  Env:
+    Default: DEV
+    Description: Environment type
+    Type: String
+    AllowedValues:
+      - DEV
+      - QAS
+      - PRD
+      - DEPLOY
+  Project:
+    Default: home
+    Description: Project name
+    Type: String
+  EmrEbsRootVolumeSize:
+    Default: '32'
+    Description: Root Volume Size (GB)
+    Type: Number
+  EmrEbsMasterAttachedVolumeSize:
+    Default: '250'
+    Description: Attached Volume Size (EMR Master) (GB)
+    Type: Number
+  EmrEbsCoreAttachedVolumeSize:
+    Default: '250'
+    Description: Attached Volume Size (EMR Core) (GB)
+    Type: Number
+  EmrMasterInstance:
+    AllowedValues: [c1.medium, c1.xlarge, c3.xlarge, c3.2xlarge, c3.4xlarge, c3.8xlarge, c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge, c5.18xlarge, cc2.8xlarge, cg1.4xlarge, cr1.8xlarge, d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge, g2.2xlarge, hi1.4xlarge, hs1.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge, i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge, i3.16xlarge, m1.medium, m1.large, m1.xlarge, m2.xlarge, m2.2xlarge, m2.4xlarge, m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge, m4.16xlarge, m5.xlarge, m5.2xlarge, m5.4xlarge, m5.12xlarge, m5.24xlarge, p2.xlarge, p2.8xlarge, p2.16xlarge, p3.2xlarge, p3.8xlarge, p3.16xlarge, r3.xlarge, r3.2xlarge, r3.4xlarge, r3.8xlarge, r4.xlarge, r4.2xlarge, r4.4xlarge, r4.8xlarge, r4.16xlarge, r5.xlarge, r5.2xlarge]
+    ConstraintDescription: Must be a valid EC2 for EMR instance type.
+    Default: r4.xlarge  
+    Description: 'EC2 for EMR instance type (c1.medium, c4.large, etc).'
+    Type: String
+  EmrCoreInstanceType01:
+    AllowedValues: [c1.medium, c1.xlarge, c3.xlarge, c3.2xlarge, c3.4xlarge, c3.8xlarge, c4.large, c4.xlarge, c4.2xlarge, c4.4xlarge, c4.8xlarge, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge, c5.18xlarge, cc2.8xlarge, cg1.4xlarge, cr1.8xlarge, d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge, g2.2xlarge, hi1.4xlarge, hs1.8xlarge, i2.xlarge, i2.2xlarge, i2.4xlarge, i2.8xlarge, i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge, i3.16xlarge, m1.medium, m1.large, m1.xlarge, m2.xlarge, m2.2xlarge, m2.4xlarge, m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge, m4.16xlarge, m5.xlarge, m5.2xlarge, m5.4xlarge, m5.12xlarge, m5.24xlarge, p2.xlarge, p2.8xlarge, p2.16xlarge, p3.2xlarge, p3.8xlarge, p3.16xlarge, r3.xlarge, r3.2xlarge, r3.4xlarge, r3.8xlarge, r4.xlarge, r4.2xlarge, r4.4xlarge, r4.8xlarge, r4.16xlarge, r5.xlarge, r5.2xlarge]
+    ConstraintDescription: Must be a valid EC2 for EMR instance type.
+    Default: m4.4xlarge
+    Description: 'EC2 for EMR instance type (c1.medium, c4.large, etc).'
+    Type: String
+  EmrNumberOfMasterInstances:
+    Default: '1'
+    Description: Number of Master Instances
+    Type: Number
+  EmrNumberOfCoreInstances:
+    Default: '1'
+    Description: Number of Master Instances
+    Type: Number
+  EmrTerminationProtected:
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+    Description: Must enable termination protection
+    Type: String
+  EmrReleaseLabel:
+    Description: EMR Release version
+    Type: String
+    Default: emr-5.19.0
+  EmrClusterName:
+    Description: EMR Cluster Name
+    Type: String
+    Default: emr-home
+  EmrCreate:
+    Default: 'yes'
+    Description: Create EMR?
+    Type: String
+    AllowedValues:
+      - 'yes'
+      - 'no'  
+Resources:
+  Networking:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: !Join
+        - /
+        - - https://s3.amazonaws.com
+          - !FindInMap
+            - S3Buckets
+            - TemplateSource
+            - !Ref Env
+          - !FindInMap
+            - S3Keys
+            - TemplateSource
+            - !Ref Env
+          - networking.yaml
+  SecurityGroups:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        Env: !Ref Env
+        Project: !Ref Project
+        VpcId: !GetAtt
+          - Networking
+          - Outputs.VpcId
+      TemplateURL: !Join
+        - /
+        - - https://s3.amazonaws.com
+          - !FindInMap
+            - S3Buckets
+            - TemplateSource
+            - !Ref Env
+          - !FindInMap
+            - S3Keys
+            - TemplateSource
+            - !Ref Env
+          - security_groups.yaml
+  EMRStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Condition: EmrCreate
+    Properties:
+      Parameters:
+        Env: !Ref Env
+        Project: !Ref Project
+        KeyName: !FindInMap
+          - KeyPair
+          - !Ref 'AWS::Region'
+          - !Ref Env
+        EbsRootVolumeSize: !Ref EmrEbsRootVolumeSize
+        EbsMasterAttachedVolumeSize: !Ref EmrEbsMasterAttachedVolumeSize
+        EbsCoreAttachedVolumeSize: !Ref EmrEbsCoreAttachedVolumeSize
+        MasterInstanceType : !Ref EmrMasterInstance
+        CoreSpotFleetInstanceType01 : !Ref EmrCoreInstanceType01
+        NumberOfMasterInstances: !Ref EmrNumberOfMasterInstances
+        NumberOfCoreInstances: !Ref EmrNumberOfCoreInstances
+        TerminationProtected: !Ref EmrTerminationProtected
+        EmrReleaseLabel: !Ref EmrReleaseLabel
+        EmrClusterName: !Join
+          - '-'
+          - - !Ref EmrClusterName
+            - !FindInMap [EnvKeys, Lowercase, !Ref Env]
+        BucketName: !FindInMap
+          - S3Buckets
+          - OutputData
+          - !Ref Env
+        EmrLogS3Key: !FindInMap
+          - S3Keys
+          - EMRLogs
+          - !Ref Env
+        PublicSubnet: !GetAtt
+          - Networking
+          - Outputs.PublicSubnet1
+        EmrMasterSG: !GetAtt
+          - SecurityGroups
+          - Outputs.PublicSG
+        EmrSlaveSG: !GetAtt
+          - SecurityGroups
+          - Outputs.PublicSG
+        BootstrapS3Path: !Join
+        - /
+        - - !FindInMap
+            - S3Buckets
+            - TemplateSource
+            - !Ref Env
+          - !FindInMap
+            - S3Keys
+            - TemplateSource
+            - !Ref Env
+          - bootstrap
+      TemplateURL: !Join
+        - /
+        - - https://s3.amazonaws.com
+          - !FindInMap
+            - S3Buckets
+            - TemplateSource
+            - !Ref Env
+          - !FindInMap
+            - S3Keys
+            - TemplateSource
+            - !Ref Env
+          - emr.yaml          
