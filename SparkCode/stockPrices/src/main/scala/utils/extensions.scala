@@ -11,7 +11,7 @@ object extensions {
     def writeAsCSV(): Unit = {
       df.write.format("parquet").mode(SaveMode.Overwrite).save("s3://home-laboratory/analitico/result")
     }
-    
+
   }
 
   def getAverage: UserDefinedFunction = udf((min: Double,max:Double) => {

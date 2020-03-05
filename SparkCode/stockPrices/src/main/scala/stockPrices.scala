@@ -10,7 +10,7 @@ object stockPrices {
     val hitoricalStockPriceDf = sparkUtils.getCSV(config.getString("stockPrices"), spark)
     val hitoricalStockDf = sparkUtils.getCSV(config.getString("stocks"), spark)
     hitoricalStockPriceDf.transform(applyLogic(hitoricalStockDf)).writeAsCSV()
-
+    spark.stop()
   }
 
 }

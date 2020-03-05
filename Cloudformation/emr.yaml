@@ -122,6 +122,10 @@ Resources:
           ConfigurationProperties:
             hive.metastore.client.factory.class: >-
               com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory
+        - Classification: hive-site
+          ConfigurationProperties:
+            hive.metastore.client.factory.class: >-
+              com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory              
       Instances:
         Ec2KeyName: !Ref KeyName
         Ec2SubnetId: !Ref PublicSubnet
@@ -152,7 +156,7 @@ Resources:
                   SizeInGB: !Ref EbsCoreAttachedVolumeSize
                   VolumeType: gp2
         TerminationProtected: !Ref TerminationProtected
-        KeepJobFlowAliveWhenNoSteps: true
+        KeepJobFlowAliveWhenNoSteps: false
       EbsRootVolumeSize: !Ref EbsRootVolumeSize
       VisibleToAllUsers: true
       JobFlowRole: !Ref EmrInstanceProfile
@@ -184,23 +188,32 @@ Resources:
         - Name: SetupEmrSlaveUserAccess
           ScriptBootstrapAction:
             Path: !Sub "s3://${BootstrapS3Path}/userAccess.sh"
+        - Name: SetupEmrFSConsistentViewTable
+          ScriptBootstrapAction:
+            Path: !Sub "s3://${BootstrapS3Path}/emrfsconsistent.sh"
+            Args: [!Ref EmrMetastoreTable]            
       Steps:
-        - Name: spark-submit
-          ActionOnFailure: TERMINATE_CLUSTER
-          HadoopJarStep: 
-            - Args: 
-                - spark-submit
-                - --driver-memory
-                - 1G 
-                - --executor-memory
-                - 15G                
-                - --executor-cores
-                - 5
-                - --num-executors
-                - 3
-                - -class
-                - stockPrices              
-              Jar: s3://home-laboratory/analitico/jars/stock-prices-assembly-0.1.jar
+        - Name: sparkStockPrices
+          ActionOnFailure: CONTINUE
+          HadoopJarStep:
+            Args: 
+              - 'spark-submit'
+              - '--driver-memory'
+              - '1G'
+              - '--executor-memory'
+              - '15G'
+              - '--executor-cores'
+              - '5'
+              - '--num-executors'
+              - '3'
+              - '--master'
+              - 'yarn'
+              - '--deploy-mode'
+              - 'cluster'
+              - '--class'
+              - 'stockPrices'
+              - 's3://home-laboratory/analitico/jars/stock-prices-assembly-0.1.jar'
+            Jar: command-runner.jar
   EmrServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:

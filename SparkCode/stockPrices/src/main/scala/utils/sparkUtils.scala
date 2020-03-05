@@ -10,7 +10,7 @@ object sparkUtils {
     val spark = SparkSession
       .builder()
       .appName(appName)
-      .enableHiveSupport
+     // .enableHiveSupport
       .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
       .config("spark.sql.parquet.writeLegacyFormat", "true")
       .config("spark.rdd.compress", "true")
